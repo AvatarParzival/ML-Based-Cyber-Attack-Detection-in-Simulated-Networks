@@ -16,6 +16,11 @@
 ![Flask](https://img.shields.io/badge/Flask-Live%20Dashboard-000000?style=for-the-badge&logo=flask&logoColor=white)
 ![GNS3](https://img.shields.io/badge/GNS3-Network%20Lab-2E9E49?style=for-the-badge)
 ![Kali](https://img.shields.io/badge/Kali%20Linux-Attacker-557C94?style=for-the-badge&logo=kalilinux&logoColor=white)
+![Lubuntu](https://img.shields.io/badge/Lubuntu-Victim%20Server-0068C8?style=for-the-badge&logo=lubuntu&logoColor=white)
+![Lubuntu](https://img.shields.io/badge/Lubuntu-Legitimate%20Server-0068C8?style=for-the-badge&logo=lubuntu&logoColor=white)
+![Ubuntu](https://img.shields.io/badge/Ubuntu-IDS%20Monitor-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
+![VMware](https://img.shields.io/badge/VMware%20Workstation-Hypervisor-607078?style=for-the-badge&logo=vmware&logoColor=white)
+![Wireshark](https://img.shields.io/badge/Wireshark-Packet%20Capture-1679A7?style=for-the-badge&logo=wireshark&logoColor=white)
 
 ![Accuracy](https://img.shields.io/badge/Best%20Model%20Accuracy-99.74%25-22c55e?style=flat-square)
 ![Classes](https://img.shields.io/badge/Traffic%20Classes-5-0ea5e9?style=flat-square)
