@@ -108,29 +108,35 @@ The system classifies every one-second flow window into exactly one of five cate
 
 ## 🏗️ System Architecture
 
-```
-  ╔═════════════════════════╗        ╔══════════════════════════╗
-  ║   PHASE A — TRAINING     ║        ║   PHASE B — DEPLOYMENT   ║
-  ║   (offline, Windows)    ║        ║   (live, Ubuntu sensor)  ║
-  ╠══════════════════════════╣        ╠══════════════════════════╣
-  ║  8 PCAP captures        ║        ║  Scapy live sniffer      ║
-  ║         │               ║        ║         │                ║
-  ║         ▼               ║        ║         ▼                ║
-  ║  pcap_to_csv.py         ║        ║  Flow grouping           ║
-  ║  (34-feature windows)   ║        ║         │                ║
-  ║         │               ║        ║         ▼                ║
-  ║         ▼               ║        ║  Feature extraction      ║
-  ║  ids_dataset.csv        ║        ║         │                ║
-  ║         │               ║        ║         ▼                ║
-  ║         ▼               ║  model ║  best_ids_model.pkl     ║
-  ║  train_models.py        ║  ====> ║  .predict()  →  0–4       ║
-  ║  (benchmark 5 models)   ║ .pkl   ���         │                ║
-  ║         │               ║        ║         ▼                ║
-  ║         ▼               ║        ║  Heuristic guards        ║
-  ║  best_ids_model.pkl     ║        ║         │                ║
-  ║  feature_columns.pkl    ║        ║         ▼                ║
-  ║  label_mapping.json     ║        ║  Flask dashboard + CSV   ║
-  ╚══════════════════════════╝        ╚══════════════════════════╝
+```mermaid
+%%{init: {"theme":"base", "themeVariables": {
+  "fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace",
+  "primaryColor":"#0f172a", "primaryTextColor":"#e2e8f0",
+  "primaryBorderColor":"#334155", "lineColor":"#94a3b8",
+  "clusterBkg":"#0b1220", "clusterBorder":"#1e293b",
+  "edgeLabelBackground":"#0b1220"
+}}}%%
+flowchart LR
+  subgraph A["PHASE A &mdash; TRAINING &nbsp;(offline, Windows)"]
+    direction TB
+    A1["8 PCAP captures"] --> A2["pcap_to_csv.py<br/>34-feature 1s windows"]
+    A2 --> A3["ids_dataset.csv<br/>1,521 labelled windows"]
+    A3 --> A4["train_models.py<br/>benchmark 5 models"]
+    A4 --> A5["best_ids_model.pkl<br/>feature_columns.pkl<br/>label_mapping.json"]
+  end
+  subgraph B["PHASE B &mdash; DEPLOYMENT &nbsp;(live, Ubuntu sensor)"]
+    direction TB
+    B1["Scapy live sniffer"] --> B2["Flow grouping"]
+    B2 --> B3["Feature extraction"]
+    B3 --> B4["best_ids_model.predict()<br/>&rarr; class 0&ndash;4"]
+    B4 --> B5["Heuristic guards"]
+    B5 --> B6["Flask dashboard + CSV logs"]
+  end
+  A5 == trained .pkl artifacts ==> B4
+  classDef art fill:#14532d,stroke:#22c55e,color:#dcfce7;
+  classDef alert fill:#3f1d1d,stroke:#ef4444,color:#fee2e2;
+  class A5,B4 art;
+  class B6 alert;
 ```
 
 The **three exported artifacts** (`best_ids_model.pkl`, `feature_columns.pkl`, `label_mapping.json`) are the only things that cross from the training phase into deployment — a clean, portable handoff.
@@ -139,7 +145,7 @@ The **three exported artifacts** (`best_ids_model.pkl`, `feature_columns.pkl`, `
 
 ## 🌐 Lab Topology
 
-Four virtual machines are wired through a single **Ethernet hub**, giving the IDS monitor node complete visibility of every frame exchanged between the attacker, the victim, and the legitimate client.
+The whole environment was built and run **inside GNS3**, hosted on the **GNS3 VM** with **VMware Workstation** providing the virtual machines. Four VMs are wired through a single **Ethernet hub** in a star topology, giving the IDS monitor node complete visibility of every frame exchanged between the attacker, the victim, and the legitimate client — no managed-switch port mirroring required.
 
 <div align="center">
 <img src="docs/screenshots/01-topology.jpg" alt="GNS3 lab topology diagram" width="88%">
@@ -243,7 +249,7 @@ The victim exposes three real services, giving the attacks authentic targets and
 
 ## 📡 Phase 2 — Generating & Capturing Traffic
 
-Eight independent capture sessions were run — four benign, four malicious — each saved to its own labelled PCAP. Every command below was executed from the Kali attacker against the victim at `192.168.188.130`, with the IDS monitor passively capturing throughout.
+Eight independent capture sessions were run — four benign, four malicious — each saved to its own labelled PCAP. Every command below was executed from the Kali attacker against the victim at `192.168.188.130`, while the IDS monitor node (`192.168.188.132`) passively recorded the traffic with **Wireshark** throughout. The BPF filter (see Phase 5) kept the captures clean by excluding the monitor's own traffic, the **GNS3 VM**, the gateway, NAT/management networks, multicast, and broadcast noise.
 
 ### 🟢 Benign Traffic (label `0`)
 
@@ -417,30 +423,24 @@ BPF_FILTER = (
 
 ### The Detection Pipeline
 
-```
-  ┌──────────────────────────────────────────────────────────────┐
-  │  ①  sniff(iface="ens33", filter=BPF, timeout=1.0, store=True)  │
-  └──────────────────────────┬───────────────────────────────────┘
-                             ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │  ②  Group packets into flows: (src_ip, dst_ip, proto, dst_port)  │
-  └──────────────────────────┬───────────────────────────────────┘
-                             ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │  ③  Compute 34 features per flow  →  reorder to feature_columns  │
-  └──────────────────────────┬───────────────────────────────────┘
-                             ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │  ④  Random Forest .predict()  →  label 0-4  →  attack_type      │
-  └──────────────────────────┬───────────────────────────────────┘
-                             ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │  ⑤  Heuristic guards  →  suppress FPs / force-catch obvious floods │
-  └──────────────────────────┬───────────────────────────────────┘
-                             ▼
-  ┌──────────────────────────────────────────────────────────────┐
-  │  ⑥  5s alert hold  →  update dashboard state  →  write CSV log    │
-  └──────────────────────────────────────────────────────────────┘
+```mermaid
+%%{init: {"theme":"base", "themeVariables": {
+  "fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace",
+  "primaryColor":"#0f172a", "primaryTextColor":"#e2e8f0",
+  "primaryBorderColor":"#334155", "lineColor":"#94a3b8"
+}}}%%
+flowchart TB
+  P1["1 &nbsp; sniff(iface=&quot;ens33&quot;, filter=BPF,<br/>timeout=1.0, store=True)"]
+  P2["2 &nbsp; Group packets into flows<br/>(src_ip, dst_ip, proto, dst_port)"]
+  P3["3 &nbsp; Compute 34 features per flow<br/>&rarr; reorder to feature_columns"]
+  P4["4 &nbsp; Random Forest .predict()<br/>&rarr; label 0&ndash;4 &rarr; attack_type"]
+  P5["5 &nbsp; Heuristic guards<br/>suppress FPs / force-catch obvious floods"]
+  P6["6 &nbsp; 5s alert hold &rarr; update dashboard<br/>state &rarr; write CSV log"]
+  P1 --> P2 --> P3 --> P4 --> P5 --> P6
+  classDef model fill:#1e3a8a,stroke:#3b82f6,color:#dbeafe;
+  classDef out fill:#14532d,stroke:#22c55e,color:#dcfce7;
+  class P4 model;
+  class P6 out;
 ```
 
 ### Launching the Sensor
@@ -538,7 +538,10 @@ Each row is a complete record of one classification decision — what was seen, 
 
 - **Python 3.10+**
 - **Root/sudo privileges** on the monitor node (raw socket packet capture requires them)
-- **GNS3 + VMware/VirtualBox** to rebuild the lab (optional — the pre-captured PCAPs are included, so you can retrain without rebuilding the network)
+- **GNS3 + VMware Workstation** — the entire system was designed, built, and executed **inside GNS3**, with VMware Workstation as the underlying hypervisor and the **GNS3 VM** hosting the topology. This is not an optional add-on: every node (Kali attacker, Lubuntu victim server, Ubuntu IDS monitor, legitimate client, Ethernet hub) and every packet in this project exists because of that environment.
+- **Wireshark** — installed on the IDS monitor node (`192.168.188.132`) and used to capture **all eight PCAP datasets**, both benign and malicious, through the BPF filter described in Phase 5.
+
+> ℹ️ **What you need depends on what you want to do.** To *retrain the models or run the live dashboard*, you only need Python — the eight labelled PCAPs and the trained artifacts are already in this repository. You need GNS3, VMware Workstation, and Wireshark only if you want to **rebuild the lab and re-capture the traffic from scratch**.
 
 ### Setup
 
@@ -795,7 +798,7 @@ Released under the **MIT License** — see [`LICENSE`](LICENSE) for full text.
 
 ### ⭐ If this project helped you understand how ML-based intrusion detection actually works end-to-end, consider starring the repo.
 
-**Built with** Python · Scapy · scikit-learn · Flask · Chart.js · Tailwind CSS · GNS3 · Kali Linux
+**Built with** Python · Scapy · scikit-learn · Flask · Chart.js · Tailwind CSS · **GNS3** · **VMware Workstation** · **Wireshark** · Kali Linux
 
 <sub>ML Based Cyber Attack Detection in Simulated Networks — F25PROJECT08A18</sub>
 
