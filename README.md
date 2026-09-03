@@ -50,7 +50,7 @@
 - [Complete Feature Reference](#-complete-feature-reference)
 - [Results Summary](#-results-summary)
 - [Design Decisions & Engineering Notes](#%EF%B8%8F-design-decisions--engineering-notes)
-- [Limitations & Future Work](#%EF%B8%8F-limitations--future-workk)
+- [Limitations & Future Work](#%EF%B8%8F-limitations--future-work)
 - [Security & Ethics Notice](#-security--ethics-notice)
 - [Authors](#-authors)
 - [License](#-license)
