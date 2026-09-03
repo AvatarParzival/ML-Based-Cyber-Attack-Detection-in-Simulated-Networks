@@ -424,23 +424,16 @@ BPF_FILTER = (
 ### The Detection Pipeline
 
 ```mermaid
-%%{init: {"theme":"base", "themeVariables": {
-  "fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace",
-  "primaryColor":"#0f172a", "primaryTextColor":"#e2e8f0",
-  "primaryBorderColor":"#334155", "lineColor":"#94a3b8"
-}}}%%
 flowchart TB
-  P1["1 &nbsp; sniff(iface=&quot;ens33&quot;, filter=BPF,<br/>timeout=1.0, store=True)"]
-  P2["2 &nbsp; Group packets into flows<br/>(src_ip, dst_ip, proto, dst_port)"]
-  P3["3 &nbsp; Compute 34 features per flow<br/>&rarr; reorder to feature_columns"]
-  P4["4 &nbsp; Random Forest .predict()<br/>&rarr; label 0&ndash;4 &rarr; attack_type"]
-  P5["5 &nbsp; Heuristic guards<br/>suppress FPs / force-catch obvious floods"]
-  P6["6 &nbsp; 5s alert hold &rarr; update dashboard<br/>state &rarr; write CSV log"]
+  P1["1. Sniff on ens33 with BPF filter<br/>timeout = 1.0s, store = True"]
+  P2["2. Group packets into flows<br/>src_ip, dst_ip, proto, dst_port"]
+  P3["3. Compute 34 features per flow<br/>then reorder to feature_columns"]
+  P4["4. Random Forest predict<br/>label 0-4, then attack_type"]
+  P5["5. Heuristic guards<br/>suppress false positives, force-catch obvious floods"]
+  P6["6. 5s alert hold, update dashboard<br/>then write CSV log"]
   P1 --> P2 --> P3 --> P4 --> P5 --> P6
-  classDef model fill:#1e3a8a,stroke:#3b82f6,color:#dbeafe;
-  classDef out fill:#14532d,stroke:#22c55e,color:#dcfce7;
-  class P4 model;
-  class P6 out;
+  style P4 fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+  style P6 fill:#dcfce7,stroke:#22c55e,color:#14532d
 ```
 
 ### Launching the Sensor
